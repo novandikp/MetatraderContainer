@@ -15,6 +15,8 @@ MONO_URL="https://dl.winehq.org/wine/wine-mono/10.3.0/wine-mono-10.3.0-x86.msi"
 MT5SETUP_URL="https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
 ACCOUNTS_DIR="/config/accounts"
 MT5_COUNT="${MT5_COUNT:-1}"
+MASTER_ID="${MASTER_ID:-1}"
+SHARED_DIR="/shared"
 
 export WINEDEBUG
 
@@ -33,6 +35,7 @@ cleanup() {
     wait
     for ((i=1; i<=MT5_COUNT; i++)); do
         PREFIX="${ACCOUNTS_DIR}/mt5-${i}/.wine"
+        mountpoint -q "${PREFIX}/drive_c/shared" && umount "${PREFIX}/drive_c/shared"
         mountpoint -q "$PREFIX" && umount "$PREFIX"
     done
     exit 0
@@ -93,6 +96,20 @@ for ((i=1; i<=MT5_COUNT; i++)); do
     fi
 
     export WINEPREFIX="$PREFIX"
+
+    mkdir -p "${PREFIX}/drive_c/shared"
+    mount --bind "$SHARED_DIR" "${PREFIX}/drive_c/shared"
+
+    mkdir -p "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts"
+    cp "$SHARED_DIR"/ea/*.ex5 \
+       "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts/" \
+       2>/dev/null || true
+
+    if [ "$i" -eq "$MASTER_ID" ]; then
+        mkdir -p "$SHARED_DIR/signals"
+        touch "$SHARED_DIR/signals/master"
+    fi
+
     $WINE "$TERM_EXE" &
     PID=$!
     echo $PID > "/tmp/${INSTANCE_ID}.pid"
