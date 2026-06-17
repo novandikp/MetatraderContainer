@@ -33,14 +33,6 @@ cleanup() {
     echo "[MT5] Shutting down..."
     for pid in $(jobs -p); do kill "$pid" 2>/dev/null; done
     wait
-    for ((i=1; i<=MT5_COUNT; i++)); do
-        PREFIX="${ACCOUNTS_DIR}/mt5-${i}/.wine"
-        mountpoint -q "${PREFIX}/drive_c/shared" && umount "${PREFIX}/drive_c/shared"
-        [ -n "$WINE_USER" ] && {
-            mountpoint -q "${PREFIX}/drive_c/users/${WINE_USER}/AppData/Roaming/MetaQuotes/Terminal/Common/Files" \
-                && umount "${PREFIX}/drive_c/users/${WINE_USER}/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
-        }
-    done
     exit 0
 }
 trap cleanup SIGINT SIGTERM
@@ -111,15 +103,13 @@ for ((i=1; i<=MT5_COUNT; i++)); do
 
     export WINEPREFIX="$PREFIX"
 
-    mkdir -p "${PREFIX}/drive_c/shared"
-    mount --bind "$SHARED_DIR" "${PREFIX}/drive_c/shared" 2>/dev/null || \
-        echo "[MT5] ${INSTANCE_ID}: warning - could not bind /shared"
+    ln -sfn "$SHARED_DIR" "${PREFIX}/drive_c/shared"
 
     if [ -n "$WINE_USER" ]; then
         COMMON_PATH="${PREFIX}/drive_c/users/${WINE_USER}/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
-        mkdir -p "$COMMON_PATH" "$SHARED_DIR/files" 2>/dev/null || true
-        mount --bind "$SHARED_DIR/files" "$COMMON_PATH" 2>/dev/null || \
-            echo "[MT5] ${INSTANCE_ID}: warning - could not bind shared/files"
+        mkdir -p "$SHARED_DIR/files" 2>/dev/null || true
+        rm -rf "$COMMON_PATH"
+        ln -sfn "$SHARED_DIR/files" "$COMMON_PATH"
     fi
 
     mkdir -p "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts" 2>/dev/null || true
