@@ -99,7 +99,8 @@ for ((i=1; i<=MT5_COUNT; i++)); do
 
     if [ ! -d "$PREFIX/drive_c" ]; then
         echo "[MT5] ${INSTANCE_ID}: copying template..."
-        mkdir -p "$PREFIX"
+        rm -rf "$PREFIX"
+        mkdir -p "$(dirname "$PREFIX")"
         cp -a --reflink=auto "$TEMPLATE_PREFIX" "$PREFIX"
     fi
 
