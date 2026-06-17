@@ -2,3 +2,4 @@
 .devcontainer/
 .env
 config/
+__pycache__/

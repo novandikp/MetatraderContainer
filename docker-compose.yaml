@@ -1,13 +1,13 @@
 services:
   mt5:
     build: .
-    image: gmag11/metatrader5_vnc
     container_name: mt5
     volumes:
       - ./config:/config
     ports:
       - 3000:3000
-      - 8001:8001
+    environment:
+      - MT5_COUNT=${MT5_COUNT:-1}
     env_file:
       - .env
 
