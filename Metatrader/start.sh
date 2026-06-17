@@ -36,6 +36,10 @@ cleanup() {
     for ((i=1; i<=MT5_COUNT; i++)); do
         PREFIX="${ACCOUNTS_DIR}/mt5-${i}/.wine"
         mountpoint -q "${PREFIX}/drive_c/shared" && umount "${PREFIX}/drive_c/shared"
+        [ -n "$WINE_USER" ] && {
+            mountpoint -q "${PREFIX}/drive_c/users/${WINE_USER}/AppData/Roaming/MetaQuotes/Terminal/Common/Files" \
+                && umount "${PREFIX}/drive_c/users/${WINE_USER}/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+        }
         mountpoint -q "$PREFIX" && umount "$PREFIX"
     done
     exit 0
@@ -46,22 +50,22 @@ trap cleanup SIGINT SIGTERM
 export WINEPREFIX="$TEMPLATE_PREFIX"
 
 if [ ! -e "$WINEPREFIX/drive_c/windows/mono" ]; then
-    echo "[1/4] Installing Mono in template..."
+    echo "[1/5] Installing Mono in template..."
     mkdir -p "$WINEPREFIX/drive_c"
     curl -Lso "$WINEPREFIX/drive_c/mono.msi" "$MONO_URL" || {
         echo "[MT5] Mono download failed"; exit 1
     }
     WINEDLLOVERRIDES=mscoree=d $WINE msiexec /i "$WINEPREFIX/drive_c/mono.msi" /qn
     rm -f "$WINEPREFIX/drive_c/mono.msi"
-    echo "[1/4] Mono installed"
+    echo "[1/5] Mono installed"
 else
-    echo "[1/4] Mono OK"
+    echo "[1/5] Mono OK"
 fi
 
 if [ -f "$MT5_EXEC" ]; then
-    echo "[2/4] MT5 template OK"
+    echo "[2/5] MT5 template OK"
 else
-    echo "[2/4] Installing MT5 in template (first run, may take a while)..."
+    echo "[2/5] Installing MT5 in template (first run, may take a while)..."
     $WINE reg add "HKEY_CURRENT_USER\\Software\\Wine" /v Version /t REG_SZ /d "win10" /f
     curl -Lso "$WINEPREFIX/drive_c/mt5setup.exe" "$MT5SETUP_URL" || {
         echo "[MT5] Download failed"; exit 1
@@ -72,11 +76,16 @@ else
     if [ ! -f "$MT5_EXEC" ]; then
         echo "[MT5] MT5 installation failed"; exit 1
     fi
-    echo "[2/4] MT5 template installed"
+    echo "[2/5] MT5 template installed"
 fi
 
-# ---- STEP 3: Launch instances ----
-echo "[3/4] Launching $MT5_COUNT instance(s)..."
+# ---- STEP 3: Detect Wine user ----
+WINE_USER=$(ls "${TEMPLATE_PREFIX}/drive_c/users/" 2>/dev/null |
+    grep -v "Default\|Public\|dosdevices" | head -1)
+echo "[3/5] Wine user: ${WINE_USER:-unknown}"
+
+# ---- STEP 4: Launch instances ----
+echo "[4/5] Launching $MT5_COUNT instance(s)..."
 mkdir -p "$ACCOUNTS_DIR"
 
 for ((i=1; i<=MT5_COUNT; i++)); do
@@ -100,6 +109,12 @@ for ((i=1; i<=MT5_COUNT; i++)); do
     mkdir -p "${PREFIX}/drive_c/shared"
     mount --bind "$SHARED_DIR" "${PREFIX}/drive_c/shared"
 
+    if [ -n "$WINE_USER" ]; then
+        COMMON_PATH="${PREFIX}/drive_c/users/${WINE_USER}/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+        mkdir -p "$COMMON_PATH" "$SHARED_DIR/files"
+        mount --bind "$SHARED_DIR/files" "$COMMON_PATH"
+    fi
+
     mkdir -p "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts"
     cp "$SHARED_DIR"/ea/*.ex5 \
        "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts/" \
@@ -117,7 +132,7 @@ for ((i=1; i<=MT5_COUNT; i++)); do
 done
 
 # ---- STEP 4: Monitor ----
-echo "[4/4] Monitoring ${MT5_COUNT} instance(s)..."
+echo "[5/5] Monitoring ${MT5_COUNT} instance(s)..."
 while true; do
     for ((i=1; i<=MT5_COUNT; i++)); do
         INSTANCE_ID="mt5-${i}"
