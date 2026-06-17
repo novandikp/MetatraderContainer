@@ -113,7 +113,7 @@ for ((i=1; i<=MT5_COUNT; i++)); do
     fi
 
     mkdir -p "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts" 2>/dev/null || true
-    cp "$SHARED_DIR"/ea/*.ex5 \
+    cp "$SHARED_DIR"/ea/*.mq5 "$SHARED_DIR"/ea/*.ex5 \
        "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts/" \
        2>/dev/null || true
 
