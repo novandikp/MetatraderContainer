@@ -118,9 +118,8 @@ for ((i=1; i<=MT5_COUNT; i++)); do
        2>/dev/null || true
 
     if [ "$i" -eq "$MASTER_ID" ]; then
-        mkdir -p "$SHARED_DIR/signals" 2>/dev/null || true
-        touch "$SHARED_DIR/signals/master" 2>/dev/null || \
-            echo "[MT5] ${INSTANCE_ID}: warning - could not create master signal"
+        mkdir -p /config/signals 2>/dev/null || true
+        touch /config/signals/master 2>/dev/null || true
     fi
 
     $WINE "$TERM_EXE" &
