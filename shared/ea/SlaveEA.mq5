@@ -13,6 +13,7 @@ input double InpLotMultiplier = 1.0;        // Multiplier for master lot
 input int    InpSlaveMagic   = 2025;        // Magic number for slave trades
 input int    InpSlippage     = 30;           // Slippage in points
 input string InpSlaveComment = "SlaveEA";    // Order comment
+input string InpSymbolMapping = "";          // Symbol map: XAUUSD.c=XAUUSDm;EURUSD=EURUSDx
 
 struct SignalData
 {
@@ -48,6 +49,8 @@ void OnDeinit(const int reason)
 void OnTick()
 {
    string content = ReadSignalFile();
+   if(content == "__READ_ERROR__")
+      return;
    if(content == lastFileContent)
       return;
    lastFileContent = content;
@@ -66,10 +69,10 @@ void OnTick()
 //+------------------------------------------------------------------+
 string ReadSignalFile()
 {
-   int file = FileOpen(InpFileName, FILE_READ | FILE_TXT | FILE_COMMON | FILE_ANSI);
+   int file = FileOpen(InpFileName, FILE_READ | FILE_TXT | FILE_COMMON | FILE_ANSI | FILE_SHARE_WRITE);
    if(file == INVALID_HANDLE)
    {
-      return "";
+      return "__READ_ERROR__";
    }
 
    string content = "";
@@ -98,7 +101,7 @@ void ParseSignals(string content)
    for(int i = 0; i < signalCount; i++)
    {
       int idx = i * 5;
-      signals[i].symbol = StringTrim(parts[idx]);
+      signals[i].symbol = MapSymbol(StringTrim(parts[idx]));
       signals[i].type   = StringTrim(parts[idx + 1]);
       signals[i].lots   = StringToDouble(parts[idx + 2]);
       signals[i].price  = StringToDouble(parts[idx + 3]);
@@ -183,7 +186,7 @@ void OpenTrade(SignalData &sig)
    double maxLot = SymbolInfoDouble(sig.symbol, SYMBOL_VOLUME_MAX);
    double stepLot = SymbolInfoDouble(sig.symbol, SYMBOL_VOLUME_STEP);
    lots = MathMax(minLot, MathMin(maxLot, lots));
-   lots = MathRound(lots / stepLot) * stepLot;
+   if(stepLot > 0) lots = MathRound(lots / stepLot) * stepLot;
 
    int type = (sig.type == "BUY") ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
    double price = (type == ORDER_TYPE_BUY) ? SymbolInfoDouble(sig.symbol, SYMBOL_ASK)
@@ -267,5 +270,22 @@ string StringTrim(string text)
    StringTrimLeft(text);
    StringTrimRight(text);
    return text;
+}
+
+//+------------------------------------------------------------------+
+string MapSymbol(string sym)
+{
+   if(InpSymbolMapping == "") return sym;
+   string pairs[];
+   int pcount = StringSplit(InpSymbolMapping, ';', pairs);
+   for(int i = 0; i < pcount; i++)
+   {
+      string kv[];
+      if(StringSplit(pairs[i], '=', kv) == 2)
+      {
+         if(kv[0] == sym) return kv[1];
+      }
+   }
+   return sym;
 }
 //+------------------------------------------------------------------+
