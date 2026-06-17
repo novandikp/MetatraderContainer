@@ -88,6 +88,11 @@ echo "[3/5] Wine user: ${WINE_USER:-unknown}"
 echo "[4/5] Launching $MT5_COUNT instance(s)..."
 mkdir -p "$ACCOUNTS_DIR"
 
+# Ensure /shared is writable by the container user
+if [ -d "$SHARED_DIR" ]; then
+    chmod 777 "$SHARED_DIR" 2>/dev/null || true
+fi
+
 for ((i=1; i<=MT5_COUNT; i++)); do
     INSTANCE_ID="mt5-${i}"
     PREFIX="${ACCOUNTS_DIR}/${INSTANCE_ID}/.wine"
@@ -99,30 +104,44 @@ for ((i=1; i<=MT5_COUNT; i++)); do
     if ! mountpoint -q "$PREFIX"; then
         echo "[MT5] ${INSTANCE_ID}: mounting overlayfs..."
         mkdir -p "$UPPER_DIR" "$WORK_DIR" "$PREFIX"
-        mount -t overlay overlay \
+        if mount -t overlay overlay \
             -o "lowerdir=$TEMPLATE_PREFIX,upperdir=$UPPER_DIR,workdir=$WORK_DIR" \
-            "$PREFIX"
+            "$PREFIX" 2>/dev/null; then
+            echo "[MT5] ${INSTANCE_ID}: overlayfs mounted"
+        else
+            echo "[MT5] ${INSTANCE_ID}: overlayfs not supported, falling back to copy..."
+            rm -rf "$UPPER_DIR" "$WORK_DIR"
+            cp -a --reflink=auto "$TEMPLATE_PREFIX" "$PREFIX"
+        fi
+    fi
+
+    if [ ! -f "$TERM_EXE" ]; then
+        echo "[MT5] ${INSTANCE_ID}: template not found at $TERM_EXE, skipping"
+        continue
     fi
 
     export WINEPREFIX="$PREFIX"
 
     mkdir -p "${PREFIX}/drive_c/shared"
-    mount --bind "$SHARED_DIR" "${PREFIX}/drive_c/shared"
+    mount --bind "$SHARED_DIR" "${PREFIX}/drive_c/shared" 2>/dev/null || \
+        echo "[MT5] ${INSTANCE_ID}: warning - could not bind /shared"
 
     if [ -n "$WINE_USER" ]; then
         COMMON_PATH="${PREFIX}/drive_c/users/${WINE_USER}/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
-        mkdir -p "$COMMON_PATH" "$SHARED_DIR/files"
-        mount --bind "$SHARED_DIR/files" "$COMMON_PATH"
+        mkdir -p "$COMMON_PATH" "$SHARED_DIR/files" 2>/dev/null || true
+        mount --bind "$SHARED_DIR/files" "$COMMON_PATH" 2>/dev/null || \
+            echo "[MT5] ${INSTANCE_ID}: warning - could not bind shared/files"
     fi
 
-    mkdir -p "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts"
+    mkdir -p "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts" 2>/dev/null || true
     cp "$SHARED_DIR"/ea/*.ex5 \
        "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts/" \
        2>/dev/null || true
 
     if [ "$i" -eq "$MASTER_ID" ]; then
-        mkdir -p "$SHARED_DIR/signals"
-        touch "$SHARED_DIR/signals/master"
+        mkdir -p "$SHARED_DIR/signals" 2>/dev/null || true
+        touch "$SHARED_DIR/signals/master" 2>/dev/null || \
+            echo "[MT5] ${INSTANCE_ID}: warning - could not create master signal"
     fi
 
     $WINE "$TERM_EXE" &
