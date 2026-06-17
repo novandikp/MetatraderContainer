@@ -7,10 +7,6 @@ services:
       - ./shared:/shared
     ports:
       - 3000:3000
-    cap_add:
-      - SYS_ADMIN
-    security_opt:
-      - seccomp:unconfined
     environment:
       - MT5_COUNT=${MT5_COUNT:-1}
     env_file:

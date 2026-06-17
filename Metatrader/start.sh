@@ -40,7 +40,6 @@ cleanup() {
             mountpoint -q "${PREFIX}/drive_c/users/${WINE_USER}/AppData/Roaming/MetaQuotes/Terminal/Common/Files" \
                 && umount "${PREFIX}/drive_c/users/${WINE_USER}/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
         }
-        mountpoint -q "$PREFIX" && umount "$PREFIX"
     done
     exit 0
 }
@@ -98,21 +97,10 @@ for ((i=1; i<=MT5_COUNT; i++)); do
     PREFIX="${ACCOUNTS_DIR}/${INSTANCE_ID}/.wine"
     TERM_EXE="${PREFIX}/drive_c/Program Files/MetaTrader 5/terminal64.exe"
 
-    UPPER_DIR="${ACCOUNTS_DIR}/${INSTANCE_ID}/.wine-upper"
-    WORK_DIR="${ACCOUNTS_DIR}/${INSTANCE_ID}/.wine-work"
-
-    if ! mountpoint -q "$PREFIX"; then
-        echo "[MT5] ${INSTANCE_ID}: mounting overlayfs..."
-        mkdir -p "$UPPER_DIR" "$WORK_DIR" "$PREFIX"
-        if mount -t overlay overlay \
-            -o "lowerdir=$TEMPLATE_PREFIX,upperdir=$UPPER_DIR,workdir=$WORK_DIR" \
-            "$PREFIX" 2>/dev/null; then
-            echo "[MT5] ${INSTANCE_ID}: overlayfs mounted"
-        else
-            echo "[MT5] ${INSTANCE_ID}: overlayfs not supported, falling back to copy..."
-            rm -rf "$UPPER_DIR" "$WORK_DIR"
-            cp -a --reflink=auto "$TEMPLATE_PREFIX" "$PREFIX"
-        fi
+    if [ ! -d "$PREFIX/drive_c" ]; then
+        echo "[MT5] ${INSTANCE_ID}: copying template..."
+        mkdir -p "$PREFIX"
+        cp -a --reflink=auto "$TEMPLATE_PREFIX" "$PREFIX"
     fi
 
     if [ ! -f "$TERM_EXE" ]; then
