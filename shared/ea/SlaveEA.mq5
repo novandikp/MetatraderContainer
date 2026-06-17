@@ -93,37 +93,36 @@ void ParseSignals(string content)
    if(content == "" || content == "no signal")
       return;
 
-   string parts[];
-   int count = StringSplit(content, '|', parts);
-   int signalCount = count / 5;
-   ArrayResize(signals, signalCount);
+   string entries[];
+   int eCount = StringSplit(content, ';', entries);
+   int sigCount = 0;
+   ArrayResize(signals, eCount);
 
-   for(int i = 0; i < signalCount; i++)
+   for(int i = 0; i < eCount; i++)
    {
-      int idx = i * 5;
-      signals[i].symbol = MapSymbol(StringTrim(parts[idx]));
-      signals[i].type   = StringTrim(parts[idx + 1]);
-      signals[i].lots   = StringToDouble(parts[idx + 2]);
-      signals[i].price  = StringToDouble(parts[idx + 3]);
-      signals[i].ticket = (long)StringToInteger(parts[idx + 4]);
-   }
+      string parts[];
+      if(StringSplit(entries[i], '|', parts) < 5) continue;
 
-   Print("[SLAVE] Signals: ", ArraySize(signals), " entries");
+      signals[sigCount].symbol = MapSymbol(StringTrim(parts[0]));
+      signals[sigCount].type   = StringTrim(parts[1]);
+      signals[sigCount].lots   = StringToDouble(parts[2]);
+      signals[sigCount].price  = StringToDouble(parts[3]);
+      signals[sigCount].ticket = (long)StringToInteger(parts[4]);
+      sigCount++;
+   }
+   ArrayResize(signals, sigCount);
+
+   Print("[SLAVE] Signals: ", sigCount, " entries");
 }
 
 //+------------------------------------------------------------------+
 void SyncPositions()
 {
-   // Open missing signals
-   for(int i = 0; i < ArraySize(signals); i++)
-   {
-      if(!HasMatchingPosition(signals[i]))
-      {
-         OpenTrade(signals[i]);
-      }
-   }
+   int sigCount = ArraySize(signals);
+   bool matched[];
+   ArrayResize(matched, sigCount);
+   ArrayInitialize(matched, false);
 
-   // Close slave positions not in signal
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
@@ -133,49 +132,47 @@ void SyncPositions()
       if((int)PositionGetInteger(POSITION_MAGIC) != InpSlaveMagic)
          continue;
 
-      string sym = PositionGetString(POSITION_SYMBOL);
-      int type = (int)PositionGetInteger(POSITION_TYPE);
-      string typeStr = (type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
-
-      if(!SignalExists(sym, typeStr))
+      long masterTicket = ExtractMasterTicket(PositionGetString(POSITION_COMMENT));
+      int sigIdx = FindMasterTicketIndex(masterTicket, sigCount);
+      if(sigIdx >= 0)
+      {
+         matched[sigIdx] = true;
+      }
+      else
       {
          ClosePosition(ticket);
       }
    }
+
+   for(int i = 0; i < sigCount; i++)
+   {
+      if(!matched[i])
+      {
+         OpenTrade(signals[i]);
+      }
+   }
 }
 
 //+------------------------------------------------------------------+
-bool HasMatchingPosition(SignalData &sig)
+int FindMasterTicketIndex(long masterTicket, int sigCount)
 {
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   for(int i = 0; i < sigCount; i++)
    {
-      ulong ticket = PositionGetTicket(i);
-      if(ticket <= 0) continue;
-      if(!PositionSelectByTicket(ticket)) continue;
-
-      if((int)PositionGetInteger(POSITION_MAGIC) != InpSlaveMagic)
-         continue;
-      if(PositionGetString(POSITION_SYMBOL) != sig.symbol)
-         continue;
-
-      int type = (int)PositionGetInteger(POSITION_TYPE);
-      string typeStr = (type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
-      if(typeStr == sig.type)
-         return true;
+      if(signals[i].ticket == masterTicket)
+         return i;
    }
-   return false;
+   return -1;
+}
+
+long ExtractMasterTicket(string comment)
+{
+   int pos = StringFind(comment, "_");
+   if(pos >= 0)
+      return StringToInteger(StringSubstr(comment, pos + 1));
+   return 0;
 }
 
 //+------------------------------------------------------------------+
-bool SignalExists(string symbol, string type)
-{
-   for(int i = 0; i < ArraySize(signals); i++)
-   {
-      if(signals[i].symbol == symbol && signals[i].type == type)
-         return true;
-   }
-   return false;
-}
 
 //+------------------------------------------------------------------+
 void OpenTrade(SignalData &sig)
@@ -201,7 +198,7 @@ void OpenTrade(SignalData &sig)
    req.price    = price;
    req.deviation = InpSlippage;
    req.magic    = InpSlaveMagic;
-   req.comment  = InpSlaveComment;
+   req.comment  = InpSlaveComment + "_" + IntegerToString(sig.ticket);
 
    if(!OrderSend(req, res))
    {
