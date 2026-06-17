@@ -30,7 +30,12 @@ command -v $WINE >/dev/null 2>&1 || { echo "wine required";  exit 1; }
 cleanup() {
     echo "[MT5] Shutting down..."
     for pid in $(jobs -p); do kill "$pid" 2>/dev/null; done
-    wait; exit 0
+    wait
+    for ((i=1; i<=MT5_COUNT; i++)); do
+        PREFIX="${ACCOUNTS_DIR}/mt5-${i}/.wine"
+        mountpoint -q "$PREFIX" && umount "$PREFIX"
+    done
+    exit 0
 }
 trap cleanup SIGINT SIGTERM
 
@@ -76,10 +81,15 @@ for ((i=1; i<=MT5_COUNT; i++)); do
     PREFIX="${ACCOUNTS_DIR}/${INSTANCE_ID}/.wine"
     TERM_EXE="${PREFIX}/drive_c/Program Files/MetaTrader 5/terminal64.exe"
 
-    if [ ! -f "$TERM_EXE" ]; then
-        echo "[MT5] ${INSTANCE_ID}: creating Wine prefix..."
-        mkdir -p "${ACCOUNTS_DIR}/${INSTANCE_ID}"
-        cp -a "$TEMPLATE_PREFIX" "$PREFIX"
+    UPPER_DIR="${ACCOUNTS_DIR}/${INSTANCE_ID}/.wine-upper"
+    WORK_DIR="${ACCOUNTS_DIR}/${INSTANCE_ID}/.wine-work"
+
+    if ! mountpoint -q "$PREFIX"; then
+        echo "[MT5] ${INSTANCE_ID}: mounting overlayfs..."
+        mkdir -p "$UPPER_DIR" "$WORK_DIR" "$PREFIX"
+        mount -t overlay overlay \
+            -o "lowerdir=$TEMPLATE_PREFIX,upperdir=$UPPER_DIR,workdir=$WORK_DIR" \
+            "$PREFIX"
     fi
 
     export WINEPREFIX="$PREFIX"
