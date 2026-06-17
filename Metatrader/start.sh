@@ -112,10 +112,12 @@ for ((i=1; i<=MT5_COUNT; i++)); do
         ln -sfn "$SHARED_DIR/files" "$COMMON_PATH"
     fi
 
-    mkdir -p "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts" 2>/dev/null || true
-    cp "$SHARED_DIR"/ea/*.mq5 "$SHARED_DIR"/ea/*.ex5 \
-       "${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts/" \
-       2>/dev/null || true
+    EXPERT_DIR="${PREFIX}/drive_c/Program Files/MetaTrader 5/MQL5/Experts"
+    mkdir -p "$EXPERT_DIR" 2>/dev/null || true
+    for f in "$SHARED_DIR"/ea/*.mq5 "$SHARED_DIR"/ea/*.ex5; do
+        [ -e "$f" ] || continue
+        cp "$f" "$EXPERT_DIR/"
+    done
 
     if [ "$i" -eq "$MASTER_ID" ]; then
         mkdir -p /config/signals 2>/dev/null || true
